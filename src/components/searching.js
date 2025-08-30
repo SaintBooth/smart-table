@@ -1,11 +1,19 @@
-import {rules, createComparison} from "../lib/compare.js";
-
+import { rules, createComparison } from "../lib/compare.js";
 
 export function initSearching(searchField) {
-    // @todo: #5.1 — настроить компаратор
+  // было неверно: [rules.skipEmptyTargetValues]
+  const compare = createComparison(
+    ["skipEmptyTargetValues"], // <- имена правил
+    rules.searchMultipleFields(
+      searchField,
+      ["date", "customer", "seller"],
+      false
+    ) // <- само правило
+  );
 
-    return (data, state, action) => {
-        // @todo: #5.2 — применить компаратор
-        return data;
-    }
+  return (data, state /*, action */) => {
+    const q = state?.[searchField];
+    if (!q) return data; // пустой запрос — ничего не фильтруем
+    return data.filter((row) => compare(row, state));
+  };
 }

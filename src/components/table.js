@@ -1,4 +1,4 @@
-import {cloneTemplate} from "../lib/utils.js";
+import { cloneTemplate } from "../lib/utils.js";
 
 /**
  * Инициализирует таблицу и вызывает коллбэк при любых изменениях и нажатиях на кнопки
@@ -8,18 +8,60 @@ import {cloneTemplate} from "../lib/utils.js";
  * @returns {{container: Node, elements: *, render: render}}
  */
 export function initTable(settings, onAction) {
-    const {tableTemplate, rowTemplate, before, after} = settings;
-    const root = cloneTemplate(tableTemplate);
+  const { tableTemplate, rowTemplate, before, after } = settings;
+  const root = cloneTemplate(tableTemplate);
 
-    // @todo: #1.2 —  вывести дополнительные шаблоны до и после таблицы
+  // @todo: #1.2 —  вывести дополнительные шаблоны до и после таблицы
+  before
+    .slice()
+    .reverse()
+    .forEach((subName) => {
+      root[subName] = cloneTemplate(subName);
+      root.container.prepend(root[subName].container);
+    });
 
-    // @todo: #1.3 —  обработать события и вызвать onAction()
+  after.forEach((subName) => {
+    root[subName] = cloneTemplate(subName);
+    root.container.append(root[subName].container);
+  });
+  // @todo: #1.3 —  обработать события и вызвать onAction()
+  root.container.addEventListener("change", () => {
+    onAction();
+  });
+  root.container.addEventListener("reset", () => {
+    setTimeout(onAction);
+  });
+  root.container.addEventListener("submit", (e) => {
+    e.preventDefault();
+    onAction(e.submitter);
+  });
 
-    const render = (data) => {
-        // @todo: #1.1 — преобразовать данные в массив строк на основе шаблона rowTemplate
-        const nextRows = [];
-        root.elements.rows.replaceChildren(...nextRows);
-    }
+  const render = (data) => {
+    // @todo: #1.1 — преобразовать данные в массив строк на основе шаблона rowTemplate
+    const nextRows = (data ?? []).map((item) => {
+      const row = cloneTemplate(rowTemplate);
 
-    return {...root, render};
+      Object.keys(item).forEach((key) => {
+        const el = row.elements?.[key];
+        if (!el) return;
+
+        if (
+          el instanceof HTMLInputElement ||
+          el instanceof HTMLSelectElement ||
+          el instanceof HTMLTextAreaElement
+        ) {
+          el.value = item[key];
+        } else {
+          el.textContent = String(item[key]);
+        }
+      });
+
+      return row.container;
+    });
+
+    // Вставляем все собранные строки в контейнер строк таблицы
+    root.elements.rows.replaceChildren(...nextRows);
+  };
+
+  return { ...root, render };
 }
