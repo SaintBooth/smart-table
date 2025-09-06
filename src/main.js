@@ -1,8 +1,6 @@
 import "./fonts/ys-display/fonts.css";
 import "./style.css";
 
-import { data as sourceData } from "./data/dataset_1.js";
-
 import { initData } from "./data.js";
 import { processFormData } from "./lib/utils.js";
 
@@ -12,44 +10,32 @@ import { initSorting } from "./components/sorting.js";
 import { initFiltering } from "./components/filtering.js";
 import { initSearching } from "./components/searching.js";
 
-// @todo: подключение
+const api = initData();
 
-// Исходные данные используемые в render()
-const { data, ...indexes } = initData(sourceData);
-
-/**
- * Сбор и обработка полей из таблицы
- * @returns {Object}
- */
+// считывает значения формы и приводит числа к int
 function collectState() {
   const state = processFormData(new FormData(sampleTable.container));
-
-  // приведение типов — важно для расчётов пагинации
-  const rowsPerPage = parseInt(state.rowsPerPage);
-  const page = parseInt(state.page ?? 1);
-
-  return {
-    ...state,
-    rowsPerPage,
-    page,
-  };
+  const rowsPerPage = parseInt(state.rowsPerPage, 10);
+  const page = parseInt(state.page ?? 1, 10);
+  return { ...state, rowsPerPage, page };
 }
 
-/**
- * Перерисовка состояния таблицы при любых изменениях
- * @param {HTMLButtonElement?} action
- */
-function render(action) {
-  let state = collectState(); // состояние из формы
-  let result = [...data]; // рабочая копия
+// собираем query, запрашиваем данные, обновляем UI, рисуем строки
+async function render(action) {
+  const state = collectState();
+  let query = {};
 
-  result = applySearching(result, state, action);
-  result = applyFiltering(result, state, action);
-  result = applySorting(result, state, action);
-  // @todo: использование — применяем пагинацию
-  result = applyPagination(result, state, action);
+  // собираем query в едином месте
+  query = applySearching(query, state, action);
+  query = applyFiltering(query, state, action);
+  query = applySorting(query, state, action);
 
-  sampleTable.render(result);
+  // пагинацию формируем ДО запроса
+  query = applyPagination(query, state, action);
+
+  const { total, items } = await api.getRecords(query);
+  updatePagination(total, query);
+  sampleTable.render(items);
 }
 
 const sampleTable = initTable(
@@ -57,29 +43,23 @@ const sampleTable = initTable(
     tableTemplate: "table",
     rowTemplate: "row",
     before: ["search", "header", "filter"],
-    after: ["pagination"], // шаблон пагинации появится внизу таблицы
+    after: ["pagination"],
   },
   render
 );
 
-const applySearching = initSearching(sampleTable.search.elements, "search");
-
-// элементы фильтра + индексы из initData()
-const applyFiltering = initFiltering(sampleTable.filter.elements, {
-  searchBySeller: indexes.sellers, // ключ = name элемента в шаблоне
-});
-
-// инициализация сортировки после созданной таблицы
+const applySearching = initSearching("search");
+const { applyFiltering, updateIndexes } = initFiltering(
+  sampleTable.filter.elements
+);
 const applySorting = initSorting([
   sampleTable.header.elements.sortByDate,
   sampleTable.header.elements.sortByTotal,
 ]);
-
-// @todo: инициализация
-const applyPagination = initPagination(
-  sampleTable.pagination.elements, // элементы пагинации из шаблона
+const { applyPagination, updatePagination } = initPagination(
+  sampleTable.pagination.elements,
+  // колбэк пагинации
   (el, page, isCurrent) => {
-    // колбэк заполнения кнопки страницы: input[type="radio"] + span
     const input = el.querySelector("input");
     const label = el.querySelector("span");
     input.value = page;
@@ -92,4 +72,12 @@ const applyPagination = initPagination(
 const appRoot = document.querySelector("#app");
 appRoot.appendChild(sampleTable.container);
 
-render();
+async function init() {
+  const indexes = await api.getIndexes();
+  updateIndexes(sampleTable.filter.elements, {
+    searchBySeller: indexes.sellers,
+  });
+}
+
+// первый рендер
+init().then(render);

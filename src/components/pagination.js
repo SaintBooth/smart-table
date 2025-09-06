@@ -4,34 +4,42 @@ export const initPagination = (
   { pages, fromRow, toRow, totalRows },
   createPage
 ) => {
-  // @todo: #2.3 — подготовить шаблон кнопки для страницы и очистить контейнер
+  // шаблон кнопки страницы
   const pageTemplate = pages.firstElementChild.cloneNode(true);
   pages.firstElementChild.remove();
 
-  return (data, state, action) => {
-    // @todo: #2.1 — посчитать количество страниц, объявить переменные и константы
-    const rowsPerPage = state.rowsPerPage;
-    const pageCount = Math.ceil(data.length / rowsPerPage);
+  // последнее известное число страниц
+  let pageCount;
+
+  // формируем параметры пагинации до запроса
+  const applyPagination = (query, state, action) => {
+    const limit = state.rowsPerPage;
     let page = state.page;
 
-    // @todo: #2.6 — обработать действия
-    if (action)
+    if (action) {
       switch (action.name) {
         case "prev":
           page = Math.max(1, page - 1);
-          break; // предыдущая
+          break;
         case "next":
-          page = Math.min(pageCount, page + 1);
-          break; // следующая
+          page = Math.min(pageCount ?? page + 1, page + 1);
+          break;
         case "first":
           page = 1;
-          break; // первая
+          break;
         case "last":
-          page = pageCount;
-          break; // последняя
+          page = pageCount || 1;
+          break;
       }
+    }
 
-    // @todo: #2.4 — получить список видимых страниц и вывести их
+    return Object.assign({}, query, { limit, page });
+  };
+
+  // перерисовываем пагинацию после запроса
+  const updatePagination = (total, { page, limit }) => {
+    pageCount = Math.max(1, Math.ceil(total / limit));
+
     const visiblePages = getPages(page, pageCount, 5);
     pages.replaceChildren(
       ...visiblePages.map((pageNumber) => {
@@ -40,13 +48,16 @@ export const initPagination = (
       })
     );
 
-    // @todo: #2.5 — обновить статус пагинации
-    fromRow.textContent = (page - 1) * rowsPerPage + 1; // с какой строки
-    toRow.textContent = Math.min(page * rowsPerPage, data.length); // по какую
-    totalRows.textContent = data.length; // всего строк
+    const from = total === 0 ? 0 : (page - 1) * limit + 1;
+    const to = Math.min(page * limit, total);
 
-    // @todo: #2.2 — посчитать сколько строк нужно пропустить и получить срез данных
-    const skip = (page - 1) * rowsPerPage;
-    return data.slice(skip, skip + rowsPerPage);
+    fromRow.textContent = from;
+    toRow.textContent = to;
+    totalRows.textContent = total;
+  };
+
+  return {
+    updatePagination,
+    applyPagination,
   };
 };

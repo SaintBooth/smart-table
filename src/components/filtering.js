@@ -1,43 +1,61 @@
-import { createComparison, defaultRules } from "../lib/compare.js";
+export function initFiltering(elements) {
+  // заполняет селекты значениями из индексов
+  const updateIndexes = (controls, indexes) => {
+    Object.keys(indexes).forEach((name) => {
+      const selectEl = controls[name];
+      if (!selectEl) return;
 
-// @todo: #4.3 — настроить компаратор
-const compare = createComparison(defaultRules);
+      const keepFirstEmpty =
+        selectEl.firstElementChild &&
+        selectEl.firstElementChild.tagName === "OPTION" &&
+        selectEl.firstElementChild.value === "";
 
-export function initFiltering(elements, indexes) {
-  // @todo: #4.1 — заполнить выпадающие списки опциями
-  Object.keys(indexes).forEach((elementName) => {
-    const el = elements[elementName];
-    if (!el) return;
+      selectEl.replaceChildren(
+        ...(keepFirstEmpty ? [selectEl.firstElementChild.cloneNode(true)] : [])
+      );
 
-    const options = Object.values(indexes[elementName]).map((name) => {
-      const opt = document.createElement("option");
-      opt.value = name;
-      opt.textContent = name;
-      return opt;
+      selectEl.append(
+        ...Object.values(indexes[name]).map((text) => {
+          const opt = document.createElement("option");
+          opt.textContent = text;
+          opt.value = text;
+          return opt;
+        })
+      );
     });
+  };
 
-    el.append(...options);
-  });
-
-  return (data, state, action) => {
-    // @todo: #4.2 — обработать очистку поля
+  const applyFiltering = (query, state, action) => {
+    // сброс значения одного поля (кнопка с data-field)
     if (action && action.name === "clear") {
       const field = action.dataset.field;
       if (field) {
         const scope =
-          action.closest("[data-filter]") ||
+          action.closest?.("[data-filter]") ||
           elements[field]?.closest?.("[data-filter]") ||
           action.parentElement;
 
         const control =
-          scope?.querySelector(`[name="${field}"]`) || elements[field];
+          scope?.querySelector?.(`[name="${field}"]`) || elements[field];
 
         if (control) control.value = "";
         if (field in state) state[field] = "";
       }
     }
 
-    // @todo: #4.5 — отфильтровать данные используя компаратор
-    return data.filter((row) => compare(row, state));
+    const filter = {};
+    Object.keys(elements).forEach((key) => {
+      const control = elements[key];
+      if (!control) return;
+      if (["INPUT", "SELECT"].includes(control.tagName) && control.value) {
+        filter[`filter[${control.name}]`] = control.value;
+      }
+    });
+
+    return Object.keys(filter).length
+      ? Object.assign({}, query, filter)
+      : query;
   };
+
+  return { updateIndexes, applyFiltering };
 }
